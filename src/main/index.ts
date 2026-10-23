@@ -12,11 +12,12 @@ const notificationProvider = new NotificationProvider();
 
 function createWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width } = primaryDisplay.workAreaSize;
+  const { width } = primaryDisplay.bounds;
 
-  // Initial window width: wide enough for expanded island/lyrics (800px), height: 320px
+  // Initial window width: wide enough for expanded island/lyrics (840px), height: 320px
   const winWidth = 840;
   const winHeight = 320;
+  // Pin exactly to the horizontal center and topmost vertical screen border (y = 0)
   const xPos = Math.round((width - winWidth) / 2);
   const yPos = 0;
 
@@ -31,6 +32,8 @@ function createWindow() {
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
+    focusable: true,
+    type: 'panel', // Allows rendering over macOS menu bar
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -39,10 +42,10 @@ function createWindow() {
     },
   });
 
-  // macOS level for screen-saver level always-on-top
+  // macOS level for screen-saver / pop-up level above top menu bar dock
   if (process.platform === 'darwin') {
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
   } else {
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
   }

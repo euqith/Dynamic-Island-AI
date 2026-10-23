@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { MusicWidget } from './components/widgets/MusicWidget';
 import { LyricsPanel } from './components/widgets/LyricsPanel';
 import { WaterWidget } from './components/widgets/WaterWidget';
@@ -9,7 +9,7 @@ import { NotificationBanner } from './components/notification/NotificationBanner
 import { MediaState, LyricLine, NotificationPayload, WaterState, TaskItem, PomodoroState } from '../../types';
 
 export const App: React.FC = () => {
-  // Island State: 'collapsed' | 'hovered' | 'expanded'
+  // Island State: 'collapsed' | 'expanded'
   const [islandState, setIslandState] = useState<'collapsed' | 'expanded'>('collapsed');
   const [activeTab, setActiveTab] = useState<number>(0); // 0: Music, 1: Water, 2: Pomodoro, 3: Todo
   const [showLyrics, setShowLyrics] = useState<boolean>(false);
@@ -18,25 +18,18 @@ export const App: React.FC = () => {
 
   // Media State
   const [media, setMedia] = useState<MediaState>({
-    title: 'Setting A Lap At COTA with Alisha...',
-    artist: 'Oracle Red Bull Racing',
-    album: 'F1 Highlights',
-    coverUrl: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=120&q=80',
-    duration: 138,
-    position: 111,
-    isPlaying: true,
-    hasMedia: true,
-    appSource: 'YouTube',
+    title: 'Tidak ada media',
+    artist: '',
+    album: '',
+    coverUrl: '',
+    duration: 0,
+    position: 0,
+    isPlaying: false,
+    hasMedia: false,
   });
 
   // Lyrics State
-  const [lyrics, setLyrics] = useState<LyricLine[]>([
-    { time: 105, text: 'Inilah salah sisi manusia, oh yeah' },
-    { time: 108, text: 'Diamku bukan sangkamu' },
-    { time: 112, text: 'Ada yang tak kau lihat' },
-    { time: 116, text: 'Bukan berarti ku tak merasa' },
-    { time: 120, text: 'Kala malam menyapa bayang' },
-  ]);
+  const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState<boolean>(false);
 
   // Active Notification
@@ -105,7 +98,7 @@ export const App: React.FC = () => {
 
       // Initial check
       window.electronAPI.getMediaState().then((state) => {
-        if (state && state.hasMedia) {
+        if (state) {
           setMedia(state);
         }
       });
@@ -125,8 +118,12 @@ export const App: React.FC = () => {
         setIsLoadingLyrics(false);
         if (lrc && lrc.length > 0) {
           setLyrics(lrc);
+        } else {
+          setLyrics([]);
         }
       }).catch(() => setIsLoadingLyrics(false));
+    } else {
+      setLyrics([]);
     }
   }, [media.title, media.artist, media.hasMedia]);
 
@@ -176,29 +173,32 @@ export const App: React.FC = () => {
     setActiveTab((prev) => (prev < 3 ? prev + 1 : 0));
   };
 
-  // Tab count: 4 (Music, Water, Pomodoro, Todo)
   const tabNames = ['Music', 'Water', 'Pomodoro', 'Todo'];
-
   const isExpanded = islandState === 'expanded';
 
   return (
-    <div className="w-full flex justify-center items-start pt-0">
+    <div className="w-full flex justify-center items-start pt-0 m-0">
       <div
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`relative bg-black/95 backdrop-blur-2xl text-white border border-white/10 rounded-[28px] shadow-[0_12px_40px_rgba(0,0,0,0.8)] transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] flex flex-col overflow-hidden cursor-default ${
+        className={`relative bg-black text-white shadow-[0_12px_45px_rgba(0,0,0,0.9)] transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] flex flex-col overflow-hidden cursor-default ${
           isExpanded
             ? showLyrics
-              ? 'w-[740px] h-[164px]'
-              : 'w-[480px] h-[156px]'
-            : 'w-[185px] h-[34px] hover:w-[210px]'
+              ? 'w-[740px] h-[164px] rounded-b-[24px] border-b border-x border-white/10'
+              : 'w-[480px] h-[156px] rounded-b-[24px] border-b border-x border-white/10'
+            : 'w-[185px] h-[34px] rounded-b-[18px] border-b border-x border-white/15'
         }`}
+        style={{
+          borderTopLeftRadius: '0px',
+          borderTopRightRadius: '0px',
+          marginTop: '0px',
+        }}
       >
-        {/* COLLAPSED STATE (Idle Notch Pill) */}
+        {/* COLLAPSED STATE (MacBook M2 Physical Notch Style) */}
         {!isExpanded && (
-          <div className="flex items-center justify-between w-full h-full px-3.5">
+          <div className="flex items-center justify-between w-full h-full px-3.5 pt-0.5">
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/90 flex items-center justify-center">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex items-center justify-center">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
               </span>
               {media.isPlaying && (
@@ -210,8 +210,8 @@ export const App: React.FC = () => {
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-200 tracking-wider font-mono">
-              <span>{currentTimeStr || '23:38'}</span>
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-100 tracking-wider font-mono">
+              <span>{currentTimeStr || '20:51'}</span>
             </div>
           </div>
         )}
@@ -224,6 +224,9 @@ export const App: React.FC = () => {
               <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 <span>{tabNames[activeTab]}</span>
+                {media.hasMedia && activeTab === 0 && (
+                  <span className="text-[9px] text-zinc-500 font-sans ml-1">({media.appSource || 'Now Playing'})</span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span>{currentDateStr} {currentTimeStr}</span>
@@ -242,7 +245,7 @@ export const App: React.FC = () => {
                 {/* Left Arrow */}
                 <button
                   onClick={prevTab}
-                  className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 text-zinc-600 hover:text-white p-1 rounded-full transition-colors cursor-pointer"
+                  className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 text-zinc-500 hover:text-white p-1 rounded-full transition-colors cursor-pointer"
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -257,7 +260,6 @@ export const App: React.FC = () => {
                         showLyrics={showLyrics}
                         onToggleLyrics={() => setShowLyrics(!showLyrics)}
                         onPlayPause={() => {
-                          setMedia((m) => ({ ...m, isPlaying: !m.isPlaying }));
                           window.electronAPI?.playPause();
                         }}
                         onNext={() => window.electronAPI?.nextTrack()}
@@ -336,7 +338,7 @@ export const App: React.FC = () => {
                 {/* Right Arrow */}
                 <button
                   onClick={nextTab}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 text-zinc-600 hover:text-white p-1 rounded-full transition-colors cursor-pointer"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 text-zinc-500 hover:text-white p-1 rounded-full transition-colors cursor-pointer"
                 >
                   <ChevronRight size={16} />
                 </button>
