@@ -48,8 +48,8 @@ export const MusicWidget: React.FC<MusicWidgetProps> = ({
   }
 
   return (
-    <div className="flex flex-col justify-between h-full px-4 py-2">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col justify-between h-full px-4 py-2 min-w-0 overflow-hidden">
+      <div className="flex items-center gap-3 min-w-0">
         {/* Album Artwork */}
         <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-zinc-800/80 shrink-0 shadow-md border border-white/5">
           {media.coverUrl ? (
@@ -70,31 +70,31 @@ export const MusicWidget: React.FC<MusicWidgetProps> = ({
 
         {/* Title & Artist */}
         <div className="flex-1 min-w-0 pr-2">
-          <h4 className="text-xs font-semibold text-white truncate leading-snug">
+          <h4 className="text-xs font-medium font-display text-white truncate leading-snug">
             {media.title}
           </h4>
-          <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+          <p className="text-[11px] text-zinc-400 font-display truncate mt-0.5">
             {media.artist || 'Unknown Artist'}
           </p>
         </div>
       </div>
 
       {/* Seekbar and Timeline */}
-      <div className="my-1.5">
+      <div className="my-1">
         <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
           <div
             className="bg-white/90 h-full rounded-full transition-all duration-300 ease-out"
             style={{ width: `${Math.min(Math.max(progressPercent, 0), 100)}%` }}
           />
         </div>
-        <div className="flex justify-between items-center text-[10px] text-zinc-400 mt-1 font-mono">
+        <div className="flex justify-between items-center text-[10px] text-zinc-400 mt-1 font-clock font-medium">
           <span>{formatTime(media.position)}</span>
           <span>-{formatTime(remainingTime)}</span>
         </div>
       </div>
 
       {/* Control Buttons */}
-      <div className="flex items-center justify-between px-2 pt-0.5">
+      <div className="flex items-center justify-between px-2 pt-0.5 pb-1">
         {/* Toggle Lyrics Button */}
         <button
           onClick={onToggleLyrics}

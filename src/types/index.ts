@@ -19,6 +19,7 @@ export interface NotificationPayload {
   id: string;
   appName: string;
   appIcon?: string;
+  avatarUrl?: string;
   title: string;
   body: string;
   timestamp: number;
@@ -44,3 +45,17 @@ export interface PomodoroState {
   isRunning: boolean;
   completedSessions: number;
 }
+
+export type SystemHUDType = 'volume' | 'charging' | 'bluetooth';
+
+export interface SystemHUDEvent {
+  type: SystemHUDType;
+  volume?: number; // 0 - 100
+  isMuted?: boolean;
+  isCharging?: boolean; // true: AC Power, false: Battery Power
+  batteryPercent?: number; // 0 - 100
+  deviceName?: string;
+  connected?: boolean;
+  timestamp: number;
+}
+

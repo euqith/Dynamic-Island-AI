@@ -3,23 +3,24 @@ import path from 'path';
 import { MediaProvider } from './services/media/mediaProvider';
 import { LyricsService } from './services/lyrics/lyricsService';
 import { NotificationProvider } from './services/notification/notificationProvider';
-import { MediaState, NotificationPayload } from '../types';
+import { SystemEventProvider } from './services/system/systemEventProvider';
+import { MediaState, NotificationPayload, SystemHUDEvent } from '../types';
 
 let mainWindow: BrowserWindow | null = null;
 const mediaProvider = new MediaProvider();
 const lyricsService = new LyricsService();
 const notificationProvider = new NotificationProvider();
+const systemEventProvider = new SystemEventProvider();
 
 function createWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width } = primaryDisplay.bounds;
+  const { bounds } = primaryDisplay;
 
-  // Initial window width: wide enough for expanded island/lyrics (840px), height: 320px
-  const winWidth = 840;
+  // Window width: 960px (wide enough to guarantee expanded 480px and lyrics 740px are never clipped)
+  const winWidth = 960;
   const winHeight = 320;
-  // Pin exactly to the horizontal center and topmost vertical screen border (y = 0)
-  const xPos = Math.round((width - winWidth) / 2);
-  const yPos = 0;
+  const xPos = Math.round(bounds.x + (bounds.width - winWidth) / 2);
+  const yPos = bounds.y; // Absolute physical top of display (y: 0 on primary)
 
   mainWindow = new BrowserWindow({
     width: winWidth,
@@ -31,9 +32,12 @@ function createWindow() {
     hasShadow: false,
     alwaysOnTop: true,
     resizable: false,
+    movable: false,
+    fullscreenable: false,
     skipTaskbar: true,
     focusable: true,
-    type: 'panel', // Allows rendering over macOS menu bar
+    enableLargerThanScreen: true,
+    roundedCorners: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -46,9 +50,28 @@ function createWindow() {
   if (process.platform === 'darwin') {
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    // Explicitly set bounds to absolute top (yPos), bypassing macOS menu bar snap
+    mainWindow.setBounds({ x: xPos, y: yPos, width: winWidth, height: winHeight }, false);
+    mainWindow.once('ready-to-show', () => {
+      mainWindow?.setBounds({ x: xPos, y: yPos, width: winWidth, height: winHeight }, false);
+    });
   } else {
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
   }
+
+  // Handle display changes / resolution scaling
+  const repositionWindow = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const currentDisplay = screen.getPrimaryDisplay();
+    const curBounds = currentDisplay.bounds;
+    const newX = Math.round(curBounds.x + (curBounds.width - winWidth) / 2);
+    const newY = curBounds.y;
+    mainWindow.setBounds({ x: newX, y: newY, width: winWidth, height: winHeight }, false);
+  };
+
+  screen.on('display-metrics-changed', repositionWindow);
+  screen.on('display-added', repositionWindow);
+  screen.on('display-removed', repositionWindow);
 
   // Mouse event pass-through handling:
   // When idle/collapsed, clicks outside the notch pill pass through to desktop/apps behind it.
@@ -83,6 +106,13 @@ function createWindow() {
   notificationProvider.onNotification((notification) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('notification:new', notification);
+    }
+  });
+
+  // Broadcast System HUD events (Volume, Charging, Bluetooth)
+  systemEventProvider.onHUDEvent((hudEvent) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('system-hud:update', hudEvent);
     }
   });
 }
@@ -122,6 +152,13 @@ ipcMain.handle('lyrics:get', async (_, title: string, artist: string) => {
 
 ipcMain.handle('notification:triggerDemo', async (_, payload: NotificationPayload) => {
   notificationProvider.emitNotification(payload);
+  return true;
+});
+
+ipcMain.handle('system-hud:triggerDemo', async (_, event: SystemHUDEvent) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('system-hud:update', event);
+  }
   return true;
 });
 

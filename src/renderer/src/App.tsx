@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Bell } from 'lucide-react';
 import { MusicWidget } from './components/widgets/MusicWidget';
 import { LyricsPanel } from './components/widgets/LyricsPanel';
 import { WaterWidget } from './components/widgets/WaterWidget';
 import { PomodoroWidget } from './components/widgets/PomodoroWidget';
 import { TodoWidget } from './components/widgets/TodoWidget';
 import { NotificationBanner } from './components/notification/NotificationBanner';
-import { MediaState, LyricLine, NotificationPayload, WaterState, TaskItem, PomodoroState } from '../../types';
+import { IslandEyes } from './components/widgets/IslandEyes';
+import { SystemHUD } from './components/hud/SystemHUD';
+import { MediaState, LyricLine, NotificationPayload, WaterState, TaskItem, PomodoroState, SystemHUDEvent } from '../../types';
 
 export const App: React.FC = () => {
   // Island State: 'collapsed' | 'expanded'
@@ -15,6 +17,10 @@ export const App: React.FC = () => {
   const [showLyrics, setShowLyrics] = useState<boolean>(false);
   const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
   const [currentDateStr, setCurrentDateStr] = useState<string>('');
+
+  // System HUD Event (Volume, Charging, Bluetooth)
+  const [activeHUD, setActiveHUD] = useState<SystemHUDEvent | null>(null);
+  const hudTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Media State
   const [media, setMedia] = useState<MediaState>({
@@ -34,6 +40,7 @@ export const App: React.FC = () => {
 
   // Active Notification
   const [activeNotification, setActiveNotification] = useState<NotificationPayload | null>(null);
+  const notificationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Water State
   const [water, setWater] = useState<WaterState>({
@@ -90,9 +97,17 @@ export const App: React.FC = () => {
       const unsubscribeNotification = window.electronAPI.onNotification((payload) => {
         setActiveNotification(payload);
         setIslandState('expanded');
+        window.electronAPI?.setIgnoreMouseEvents(false);
+
+        if (notificationTimerRef.current) {
+          clearTimeout(notificationTimerRef.current);
+        }
+
         // Auto-dismiss after 6 seconds
-        setTimeout(() => {
+        notificationTimerRef.current = setTimeout(() => {
           setActiveNotification(null);
+          setIslandState('collapsed');
+          window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
         }, 6000);
       });
 
@@ -103,9 +118,21 @@ export const App: React.FC = () => {
         }
       });
 
+      const unsubscribeHUD = window.electronAPI.onSystemHUD((event) => {
+        setActiveHUD(event);
+        if (hudTimerRef.current) {
+          clearTimeout(hudTimerRef.current);
+        }
+        const duration = event.type === 'volume' ? 1800 : 2500;
+        hudTimerRef.current = setTimeout(() => {
+          setActiveHUD(null);
+        }, duration);
+      });
+
       return () => {
         unsubscribeMedia?.();
         unsubscribeNotification?.();
+        unsubscribeHUD?.();
       };
     }
   }, []);
@@ -176,84 +203,182 @@ export const App: React.FC = () => {
   const tabNames = ['Music', 'Water', 'Pomodoro', 'Todo'];
   const isExpanded = islandState === 'expanded';
 
+  const triggerTestNotif = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.electronAPI) {
+      window.electronAPI.triggerNotification({
+        id: Date.now().toString(),
+        appName: 'WhatsApp',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=face',
+        title: 'Budi Santoso',
+        body: 'Halo bro, pesan ini berhasil masuk ke Dynamic Island! 🔥',
+        timestamp: Date.now(),
+      });
+    }
+  };
+
   return (
     <div className="w-full flex justify-center items-start pt-0 m-0">
-      <div
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        className={`relative bg-black text-white shadow-[0_12px_45px_rgba(0,0,0,0.9)] transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] flex flex-col overflow-hidden cursor-default ${
-          isExpanded
-            ? showLyrics
-              ? 'w-[740px] h-[164px] rounded-b-[24px] border-b border-x border-white/10'
-              : 'w-[480px] h-[156px] rounded-b-[24px] border-b border-x border-white/10'
-            : 'w-[185px] h-[34px] rounded-b-[18px] border-b border-x border-white/15'
-        }`}
-        style={{
-          borderTopLeftRadius: '0px',
-          borderTopRightRadius: '0px',
-          marginTop: '0px',
-        }}
-      >
-        {/* COLLAPSED STATE (MacBook M2 Physical Notch Style) */}
-        {!isExpanded && (
-          <div className="flex items-center justify-between w-full h-full px-3.5 pt-0.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex items-center justify-center">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
-              </span>
-              {media.isPlaying && (
-                <div className="flex items-end gap-0.5 h-2.5 ml-0.5">
-                  <span className="w-0.5 bg-green-400 h-full animate-[bounce_0.8s_infinite]" />
-                  <span className="w-0.5 bg-green-400 h-2/3 animate-[bounce_0.6s_infinite_0.2s]" />
-                  <span className="w-0.5 bg-green-400 h-4/5 animate-[bounce_0.9s_infinite_0.4s]" />
-                </div>
-              )}
-            </div>
+      {/* Outer Wrapper for Notch & Outward Corner Fillets */}
+      <div className="relative">
+        {/* Inverted Outward Curved Fillet: Top-Left (Subtle 4px radius) */}
+        <svg
+          className="absolute -left-[4px] top-0 w-[4px] h-[4px] pointer-events-none z-20"
+          viewBox="0 0 4 4"
+        >
+          {/* Solid Black Cutout Body */}
+          <path d="M 0,0 H 4 V 4 C 4,1.791 2.209,0 0,0 Z" fill="#000" />
+          {/* Subtle Outer Border Line */}
+          <path
+            d="M 0,0 C 2.209,0 4,1.791 4,4"
+            fill="none"
+            stroke="rgba(255,255,255,0.2)"
+            strokeWidth="0.6"
+          />
+        </svg>
 
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-100 tracking-wider font-mono">
-              <span>{currentTimeStr || '20:51'}</span>
-            </div>
-          </div>
-        )}
+        {/* Inverted Outward Curved Fillet: Top-Right (Subtle 4px radius) */}
+        <svg
+          className="absolute -right-[4px] top-0 w-[4px] h-[4px] pointer-events-none z-20"
+          viewBox="0 0 4 4"
+        >
+          {/* Solid Black Cutout Body */}
+          <path d="M 4,0 H 0 V 4 C 0,1.791 1.791,0 4,0 Z" fill="#000" />
+          {/* Subtle Outer Border Line */}
+          <path
+            d="M 4,0 C 1.791,0 0,1.791 0,4"
+            fill="none"
+            stroke="rgba(255,255,255,0.2)"
+            strokeWidth="0.6"
+          />
+        </svg>
 
-        {/* EXPANDED STATE */}
-        {isExpanded && (
-          <div className="flex flex-col h-full w-full">
-            {/* Top Bar inside Notch */}
-            <div className="flex items-center justify-between px-5 pt-2 text-[10px] text-zinc-400 font-mono border-b border-white/5 pb-1">
-              <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>{tabNames[activeTab]}</span>
-                {media.hasMedia && activeTab === 0 && (
-                  <span className="text-[9px] text-zinc-500 font-sans ml-1">({media.appSource || 'Now Playing'})</span>
+        {/* Main Notch Body Container */}
+        <div
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className={`relative bg-black text-white shadow-[0_12px_45px_rgba(0,0,0,0.9)] transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] flex flex-col overflow-hidden cursor-default ${
+            isExpanded
+              ? showLyrics
+                ? 'w-[740px] max-w-[740px] h-[184px] rounded-b-[24px] border-b border-x border-white/10'
+                : 'w-[500px] max-w-[500px] h-[176px] rounded-b-[24px] border-b border-x border-white/10'
+              : activeHUD
+                ? activeHUD.type === 'volume'
+                  ? 'w-[230px] max-w-[230px] h-[34px] rounded-b-[18px] border-b border-x border-white/15'
+                  : activeHUD.type === 'charging'
+                    ? 'w-[215px] max-w-[215px] h-[34px] rounded-b-[18px] border-b border-x border-white/15'
+                    : 'w-[260px] max-w-[260px] h-[34px] rounded-b-[18px] border-b border-x border-white/15'
+                : (media.hasMedia && media.isPlaying)
+                  ? 'w-[250px] max-w-[250px] h-[34px] rounded-b-[18px] border-b border-x border-white/15'
+                  : 'w-[185px] max-w-[185px] h-[34px] rounded-b-[18px] border-b border-x border-white/15'
+          }`}
+          style={{
+            borderTopLeftRadius: '0px',
+            borderTopRightRadius: '0px',
+            marginTop: '0px',
+          }}
+        >
+          {/* COLLAPSED STATE (MacBook M2 Physical Notch Style) */}
+          {!isExpanded && (() => {
+            // Priority 1: System HUD (Volume, Charging, Bluetooth)
+            if (activeHUD) {
+              return <SystemHUD event={activeHUD} />;
+            }
+
+            const isMusicPlaying = media.hasMedia && media.isPlaying;
+            const isIdle = !activeNotification && !isMusicPlaying;
+
+            return (
+              <div className="relative flex items-center justify-between w-full h-full px-3.5 pt-0.5 select-none">
+                {/* Bottom Ambient Cyan/Blue Light Strip (Only shown when Idle) */}
+                {isIdle && (
+                  <>
+                    <div className="absolute bottom-0 inset-x-4 h-[1.5px] bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent blur-[0.5px] pointer-events-none" />
+                    <div className="absolute -bottom-1 inset-x-8 h-[5px] bg-cyan-400/15 blur-[4px] pointer-events-none" />
+                  </>
                 )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span>{currentDateStr} {currentTimeStr}</span>
-              </div>
-            </div>
 
-            {/* Notification Priority Banner Overlay */}
-            {activeNotification ? (
-              <NotificationBanner
-                notification={activeNotification}
-                onDismiss={() => setActiveNotification(null)}
-              />
-            ) : (
-              /* Main Widget Carousel */
-              <div className="flex-1 flex min-h-0 relative">
-                {/* Left Arrow */}
-                <button
-                  onClick={prevTab}
-                  className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 text-zinc-500 hover:text-white p-1 rounded-full transition-colors cursor-pointer"
-                >
-                  <ChevronLeft size={16} />
-                </button>
+                {/* Left Side: Media / Dot Status */}
+                <div className="flex items-center gap-1.5 min-w-0 pr-1 z-10">
+                  <span className={`w-2.5 h-2.5 rounded-full flex items-center justify-center shrink-0 ${isMusicPlaying ? 'bg-emerald-500' : 'bg-emerald-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full animate-ping ${isMusicPlaying ? 'bg-emerald-300' : 'bg-emerald-300'}`} />
+                  </span>
+                  {isMusicPlaying && (
+                    <div className="flex items-end gap-0.5 h-2.5 ml-0.5 shrink-0">
+                      <span className="w-0.5 bg-green-400 h-full animate-[bounce_0.8s_infinite]" />
+                      <span className="w-0.5 bg-green-400 h-2/3 animate-[bounce_0.6s_infinite_0.2s]" />
+                      <span className="w-0.5 bg-green-400 h-4/5 animate-[bounce_0.9s_infinite_0.4s]" />
+                    </div>
+                  )}
 
-                {/* Widget Content Body */}
-                <div className="flex-1 px-5 h-full flex">
-                  {/* Left Column: Active Widget */}
-                  <div className={`h-full ${showLyrics ? 'w-[360px] border-r border-white/5 pr-2' : 'w-full'}`}>
+                  {isMusicPlaying && (
+                    <span className="text-[11px] font-medium font-display text-zinc-200 truncate ml-1 max-w-[125px]">
+                      {media.title}
+                    </span>
+                  )}
+                </div>
+
+                {/* Center: Interactive Animated Companion Eyes (HANYA MUNCUL SAAT IDLE) */}
+                {isIdle && (
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none z-10 transition-opacity duration-300">
+                    <IslandEyes isMusicPlaying={false} />
+                  </div>
+                )}
+
+                {/* Right Side: Clock */}
+                <div className="flex items-center gap-1.5 font-clock text-[12px] font-medium text-zinc-200 tracking-wide shrink-0 z-10">
+                  <span>{currentTimeStr || '09:48'}</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* EXPANDED STATE */}
+          {isExpanded && (
+            <div className="flex flex-col h-full w-full min-w-0 overflow-hidden">
+              {/* Top Bar inside Notch */}
+              <div className="flex items-center justify-between px-5 pt-2 text-[10px] text-zinc-400 border-b border-white/5 pb-1 shrink-0 min-w-0">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-medium font-display truncate min-w-0 mr-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  <span className="shrink-0">{tabNames[activeTab]}</span>
+                  {media.hasMedia && activeTab === 0 && (
+                    <span className="text-[9px] text-zinc-500 font-display ml-1 truncate">({media.appSource || 'Now Playing'})</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0 font-clock text-[11px] text-zinc-300 font-medium">
+                  <span>{currentDateStr} {currentTimeStr}</span>
+                  <button
+                    type="button"
+                    onClick={triggerTestNotif}
+                    title="Test Notifikasi (WhatsApp Demo)"
+                    className="hover:text-emerald-400 transition-colors cursor-pointer p-0.5 ml-0.5"
+                  >
+                    <Bell size={11} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Notification Priority Banner Overlay */}
+              {activeNotification ? (
+                <NotificationBanner
+                  notification={activeNotification}
+                  onDismiss={() => setActiveNotification(null)}
+                />
+              ) : (
+                /* Main Widget Carousel */
+                <div className="flex-1 flex min-w-0 min-h-0 relative">
+                  {/* Left Arrow */}
+                  <button
+                    onClick={prevTab}
+                    className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 text-zinc-500 hover:text-white p-1 rounded-full transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  {/* Widget Content Body */}
+                  <div className="flex-1 px-5 h-full flex min-w-0 overflow-hidden">
+                    {/* Left Column: Active Widget */}
+                    <div className={`h-full min-w-0 overflow-hidden ${showLyrics ? 'w-[360px] border-r border-white/5 pr-2 shrink-0' : 'w-full'}`}>
                     {activeTab === 0 && (
                       <MusicWidget
                         media={media}
@@ -346,7 +471,7 @@ export const App: React.FC = () => {
             )}
 
             {/* Bottom Pagination Dots */}
-            <div className="flex items-center justify-center gap-1.5 pb-2">
+            <div className="flex items-center justify-center gap-1.5 pb-2.5 pt-0.5 shrink-0">
               {[0, 1, 2, 3].map((idx) => (
                 <button
                   key={idx}
@@ -361,5 +486,6 @@ export const App: React.FC = () => {
         )}
       </div>
     </div>
-  );
+  </div>
+);
 };

@@ -1,0 +1,17 @@
+BUatkan planning, saya ingin membuat aplikasi dynamic island yang menyerupai notch untuk windows dan macbook.
+buatkan issue.md untuk membuat aplikasi tersebut dengan requirement dibawah:
+
+1. berbasis dekstop application
+2. menggunakan framework nodejs
+3. compatible untuk macbook dan windows
+4. memiliki fitur seperti pada gambar (simpan gambar di folder attachments)
+5. bisa konek ke nnotifikasi WA, Discord, Telegram, Outlook, Github atau apapun yang sedang terkirim ke perangkat
+6. bisa membaca music player contoh dari youtube, spotify atau apapun player yang sedang berjalan di perangkat
+7. perhatikan security agar tidak menjadi vulnerability di perangkat dan juga buat aplikasi ini berjalan ringan dan tidak membebani perangkat
+
+
+
+1. design masih tidak menempel di layar ( masih dibawah dock atas) bypass dock atas
+2. buat design notch seperti pada macbook m2 (lihat gambar)
+3. selesaikan backend untuk mendeteksi music player dan notifikasi whatsapp secara real time karena saat ini masih tidak berfungsi
+ 

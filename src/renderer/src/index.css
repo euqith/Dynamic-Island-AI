@@ -1,11 +1,53 @@
 @import "tailwindcss";
 
 @layer base {
+  html, body, #root {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: transparent;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
   body {
     -webkit-app-region: no-drag;
     user-select: none;
     -webkit-user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
+}
+
+/* Waving Paw Animation for Nusa Companion */
+@keyframes wave {
+  0%, 100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  25% {
+    transform: rotate(-18deg) translateY(-1px);
+  }
+  75% {
+    transform: rotate(16deg) translateY(-2px);
+  }
+}
+
+/* Elegant Apple-style Clock Typography with Tabular Figures */
+.font-clock {
+  font-family: "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.015em;
+}
+
+/* Sleek Display Typography */
+.font-display {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  letter-spacing: -0.015em;
 }
 
 /* Custom scrollbar for lyrics */
