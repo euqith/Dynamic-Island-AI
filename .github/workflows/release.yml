@@ -43,3 +43,32 @@ jobs:
             npx electron-builder --win --publish always
           fi
 
+  publish:
+    name: Publish Release
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Draft Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const draft = releases.data.find(r => r.tag_name === tag && r.draft);
+            if (draft) {
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: draft.id,
+                draft: false
+              });
+              console.log(`Successfully published release for tag ${tag}`);
+            } else {
+              console.log(`No draft release found for tag ${tag}`);
+            }
+
+
