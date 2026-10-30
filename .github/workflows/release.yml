@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -32,43 +32,42 @@ jobs:
       - name: Build Application
         run: npm run build
 
-      - name: Build and Publish Electron Installer
+      - name: Build Electron Installer
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            npx electron-builder --mac --publish always
+            npx electron-builder --mac
           else
-            npx electron-builder --win --publish always
+            npx electron-builder --win
           fi
 
-  publish:
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+          if-no-files-found: error
+
+  release:
     name: Publish Release
-    needs: release
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Publish Draft Release
-        uses: actions/github-script@v7
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const tag = context.ref.replace('refs/tags/', '');
-            const releases = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
-            const draft = releases.data.find(r => r.tag_name === tag && r.draft);
-            if (draft) {
-              await github.rest.repos.updateRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: draft.id,
-                draft: false
-              });
-              console.log(`Successfully published release for tag ${tag}`);
-            } else {
-              console.log(`No draft release found for tag ${tag}`);
-            }
+          path: dist-artifacts
+          merge-multiple: true
 
-
+      - name: Create and Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-artifacts/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
