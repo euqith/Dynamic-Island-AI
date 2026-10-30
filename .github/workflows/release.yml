@@ -36,5 +36,6 @@ jobs:
         uses: electron-userland/electron-builder-action@v5
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          args: ${{ matrix.os == 'macos-latest' && '--mac' || '--win' }}
           release: true
 

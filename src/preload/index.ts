@@ -28,4 +28,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLyrics: (title: string, artist: string) => ipcRenderer.invoke('lyrics:get', title, artist),
   triggerNotification: (payload: NotificationPayload) => ipcRenderer.invoke('notification:triggerDemo', payload),
   triggerSystemHUD: (event: SystemHUDEvent) => ipcRenderer.invoke('system-hud:triggerDemo', event),
+  updateHitbox: (size: { width: number; height: number; expanded: boolean }) => {
+    ipcRenderer.send('update-hitbox', size);
+  },
+  onNotchHoverState: (callback: (hovered: boolean) => void) => {
+    const handler = (_: any, hovered: boolean) => callback(hovered);
+    ipcRenderer.on('notch:hover-state', handler);
+    return () => ipcRenderer.removeListener('notch:hover-state', handler);
+  },
 });

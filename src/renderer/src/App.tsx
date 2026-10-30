@@ -129,13 +129,43 @@ export const App: React.FC = () => {
         }, duration);
       });
 
+      const unsubscribeHover = window.electronAPI.onNotchHoverState?.((hovered) => {
+        if (hovered) {
+          setIslandState('expanded');
+        } else {
+          setIslandState('collapsed');
+          setShowLyrics(false);
+        }
+      });
+
       return () => {
         unsubscribeMedia?.();
         unsubscribeNotification?.();
         unsubscribeHUD?.();
+        unsubscribeHover?.();
       };
     }
   }, []);
+
+  // Smooth local timeline progression when playing (continuous, never frozen)
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (media.hasMedia && media.isPlaying && media.duration > 0) {
+      timer = setInterval(() => {
+        setMedia((prev) => {
+          if (!prev.hasMedia || !prev.isPlaying || prev.duration <= 0) return prev;
+          if (prev.position >= prev.duration) return prev;
+          return {
+            ...prev,
+            position: Math.min(prev.position + 1, prev.duration),
+          };
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [media.hasMedia, media.isPlaying, media.duration]);
 
   // Sync lyrics when song changes
   useEffect(() => {
@@ -172,6 +202,31 @@ export const App: React.FC = () => {
       if (interval) clearInterval(interval);
     };
   }, [pomodoro.isRunning, pomodoro.timeLeft]);
+
+  // Keep Main Process updated with current hitbox for precise mouse pass-through
+  useEffect(() => {
+    if (!window.electronAPI?.updateHitbox) return;
+    const isMusicPlaying = media.hasMedia && media.isPlaying;
+    let width = 185;
+    let height = 34;
+
+    if (islandState === 'expanded') {
+      width = showLyrics ? 740 : 500;
+      height = showLyrics ? 184 : 176;
+    } else if (activeHUD) {
+      width = activeHUD.type === 'volume' ? 230 : activeHUD.type === 'charging' ? 215 : 260;
+      height = 34;
+    } else if (isMusicPlaying) {
+      width = 250;
+      height = 34;
+    }
+
+    window.electronAPI.updateHitbox({
+      width,
+      height,
+      expanded: islandState === 'expanded',
+    });
+  }, [islandState, showLyrics, activeHUD, media.hasMedia, media.isPlaying]);
 
   // Handle Mouse Hitbox for click-through passthrough
   const handleMouseEnter = () => {

@@ -1,12 +1,18 @@
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 import { app, BrowserWindow, screen, ipcMain, shell } from 'electron';
 import path from 'path';
 import { MediaProvider } from './services/media/mediaProvider';
 import { LyricsService } from './services/lyrics/lyricsService';
 import { NotificationProvider } from './services/notification/notificationProvider';
 import { SystemEventProvider } from './services/system/systemEventProvider';
+import { WinBridge } from './services/platform/winBridge';
 import { MediaState, NotificationPayload, SystemHUDEvent } from '../types';
 
 let mainWindow: BrowserWindow | null = null;
+let isHovered = false;
+let currentHitbox = { width: 260, height: 40 };
+let cursorInterval: NodeJS.Timeout | null = null;
 const mediaProvider = new MediaProvider();
 const lyricsService = new LyricsService();
 const notificationProvider = new NotificationProvider();
@@ -77,6 +83,31 @@ function createWindow() {
   // When idle/collapsed, clicks outside the notch pill pass through to desktop/apps behind it.
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
+  // Windows & Cross-platform cursor hit-testing for reliable click-through
+  if (cursorInterval) clearInterval(cursorInterval);
+  cursorInterval = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const winBounds = mainWindow.getBounds();
+
+    const notchLeft = winBounds.x + (winBounds.width - currentHitbox.width) / 2;
+    const notchRight = notchLeft + currentHitbox.width;
+    const notchTop = winBounds.y;
+    const notchBottom = notchTop + currentHitbox.height + 6;
+
+    const inside = cursor.x >= notchLeft && cursor.x <= notchRight && cursor.y >= notchTop && cursor.y <= notchBottom;
+
+    if (inside && !isHovered) {
+      isHovered = true;
+      mainWindow.setIgnoreMouseEvents(false);
+      mainWindow.webContents.send('notch:hover-state', true);
+    } else if (!inside && isHovered) {
+      isHovered = false;
+      mainWindow.setIgnoreMouseEvents(true, { forward: true });
+      mainWindow.webContents.send('notch:hover-state', false);
+    }
+  }, 75);
+
   // Load URL
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
@@ -125,6 +156,13 @@ ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
   }
 });
 
+ipcMain.on('update-hitbox', (_, size: { width: number; height: number; expanded: boolean }) => {
+  currentHitbox = size;
+  if (!size.expanded && !isHovered && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  }
+});
+
 ipcMain.handle('media:getState', async () => {
   return mediaProvider.getState();
 });
@@ -168,6 +206,16 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('before-quit', () => {
+  if (cursorInterval) {
+    clearInterval(cursorInterval);
+    cursorInterval = null;
+  }
+  if (process.platform === 'win32') {
+    WinBridge.getInstance().stop();
+  }
 });
 
 app.on('window-all-closed', () => {

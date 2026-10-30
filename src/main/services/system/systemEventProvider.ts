@@ -1,6 +1,7 @@
 import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { SystemHUDEvent } from '../../../types';
+import { WinBridge } from '../platform/winBridge';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -31,7 +32,11 @@ export class SystemEventProvider {
   private isInitialBluetooth: boolean = true;
 
   constructor() {
-    if (process.platform === 'darwin') {
+    if (process.platform === 'win32') {
+      WinBridge.getInstance().onHUD((event) => {
+        this.emitHUDEvent(event);
+      });
+    } else if (process.platform === 'darwin') {
       this.startVolumeWatcher();
       this.startBatteryWatcher();
       this.startBluetoothWatcher();

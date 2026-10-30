@@ -1,11 +1,11 @@
 {
   "name": "dynamicislandai",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Dynamic Island AI for macOS & Windows",
   "main": "dist-electron/main/index.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && powershell -NoProfile -Command \"Copy-Item -Force src/main/services/platform/winBridge.ps1 dist-electron/main/\"",
     "preview": "vite preview",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -19,7 +19,8 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "src/main/services/platform/winBridge.ps1"
     ],
     "mac": {
       "target": [
@@ -30,8 +31,18 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {

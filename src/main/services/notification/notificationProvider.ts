@@ -5,6 +5,7 @@ import fs from 'fs';
 import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { NotificationPayload } from '../../../types';
+import { WinBridge } from '../platform/winBridge';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -20,8 +21,14 @@ export class NotificationProvider {
   private isDbAccessible: boolean = true;
 
   constructor() {
-    this.initDatabasePath();
-    this.startWatcher();
+    if (process.platform === 'win32') {
+      WinBridge.getInstance().onNotification((notif) => {
+        this.emitNotification(notif);
+      });
+    } else {
+      this.initDatabasePath();
+      this.startWatcher();
+    }
     this.startLocalWebhookServer();
   }
 

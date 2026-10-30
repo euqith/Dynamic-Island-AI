@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { MediaState } from '../../../types';
+import { WinBridge } from '../platform/winBridge';
 
 const execFileAsync = promisify(execFile);
 
@@ -113,7 +114,13 @@ export class MediaProvider {
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.startPolling();
+    if (process.platform === 'win32') {
+      WinBridge.getInstance().onMedia((state) => {
+        this.updateState(state);
+      });
+    } else {
+      this.startPolling();
+    }
   }
 
   public onStateChange(listener: (state: MediaState) => void) {
@@ -122,6 +129,11 @@ export class MediaProvider {
   }
 
   public async playPause(): Promise<void> {
+    if (process.platform === 'win32') {
+      await WinBridge.getInstance().playPause();
+      return;
+    }
+
     if (process.platform === 'darwin') {
       const source = (this.lastState.appSource || '').toLowerCase();
 
@@ -217,6 +229,11 @@ export class MediaProvider {
   }
 
   public async next(): Promise<void> {
+    if (process.platform === 'win32') {
+      await WinBridge.getInstance().next();
+      return;
+    }
+
     if (process.platform === 'darwin') {
       const source = (this.lastState.appSource || '').toLowerCase();
 
@@ -270,6 +287,11 @@ export class MediaProvider {
   }
 
   public async previous(): Promise<void> {
+    if (process.platform === 'win32') {
+      await WinBridge.getInstance().previous();
+      return;
+    }
+
     if (process.platform === 'darwin') {
       const source = (this.lastState.appSource || '').toLowerCase();
 

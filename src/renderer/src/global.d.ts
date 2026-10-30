@@ -13,6 +13,8 @@ export interface IElectronAPI {
   getLyrics: (title: string, artist: string) => Promise<LyricLine[]>;
   triggerNotification: (payload: NotificationPayload) => Promise<boolean>;
   triggerSystemHUD: (event: SystemHUDEvent) => Promise<boolean>;
+  updateHitbox: (size: { width: number; height: number; expanded: boolean }) => void;
+  onNotchHoverState: (callback: (hovered: boolean) => void) => () => void;
 }
 
 declare global {
