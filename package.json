@@ -1,6 +1,6 @@
 {
   "name": "dynamicislandai",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Dynamic Island AI for macOS & Windows",
   "main": "dist-electron/main/index.js",
   "scripts": {
@@ -21,6 +21,9 @@
       "dist/**/*",
       "dist-electron/**/*",
       "src/main/services/platform/winBridge.ps1"
+    ],
+    "asarUnpack": [
+      "**/winBridge.ps1"
     ],
     "mac": {
       "target": [

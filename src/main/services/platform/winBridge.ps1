@@ -67,11 +67,36 @@ $lastBatteryHash = ""
 $tick = 0
 
 while ($true) {
+    # 0. Re-acquire manager if needed
+    if (-not $mgr) {
+        try {
+            $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+        } catch {}
+    }
+
     # 1. Check Media Session
     $isPlaying = $false
     if ($mgr) {
         try {
             $session = $mgr.GetCurrentSession()
+            if (-not $session) {
+                try {
+                    $allSessions = $mgr.GetSessions()
+                    if ($allSessions -and $allSessions.Count -gt 0) {
+                        foreach ($s in $allSessions) {
+                            $pInfo = $s.GetPlaybackInfo()
+                            if ($pInfo -and [int]$pInfo.PlaybackStatus -eq 4) {
+                                $session = $s
+                                break
+                            }
+                        }
+                        if (-not $session) {
+                            $session = $allSessions[0]
+                        }
+                    }
+                } catch {}
+            }
+
             if ($session) {
                 $props = Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
                 $info = $session.GetPlaybackInfo()
@@ -158,6 +183,18 @@ while ($true) {
     }
 
     # 2. Check Notifications
+    if (-not $listener -or -not $hasNotifAccess) {
+        if ($tick % 5 -eq 0) {
+            try {
+                $listener = [Windows.UI.Notifications.Management.UserNotificationListener]::Current
+                if ($listener) {
+                    $access = Await ($listener.RequestAccessAsync()) ([Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus])
+                    $hasNotifAccess = ($access -eq [Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus]::Allowed)
+                }
+            } catch {}
+        }
+    }
+
     if ($hasNotifAccess -and $listener) {
         try {
             $notifs = Await ($listener.GetNotificationsAsync([Windows.UI.Notifications.NotificationKinds]::Toast)) ([System.Collections.Generic.IReadOnlyList[Windows.UI.Notifications.UserNotification]])
@@ -196,7 +233,7 @@ while ($true) {
         } catch {}
     }
 
-    # 3. Check Battery (every 3 cycles)
+    # 3. Check Battery
     if ($tick % 3 -eq 0) {
         try {
             $power = [System.Windows.Forms.SystemInformation]::PowerStatus
@@ -224,7 +261,6 @@ while ($true) {
     }
 
     $tick++
-    # Adaptive sleep: 1000ms when playing, 2500ms when idle/no media
     $sleepDuration = if ($isPlaying) { 1000 } else { 2500 }
     Start-Sleep -Milliseconds $sleepDuration
 }

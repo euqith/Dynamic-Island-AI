@@ -74,11 +74,36 @@ $lastBatteryHash = ""
 $tick = 0
 
 while ($true) {
+    # 0. Re-acquire manager if needed
+    if (-not $mgr) {
+        try {
+            $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+        } catch {}
+    }
+
     # 1. Check Media Session
     $isPlaying = $false
     if ($mgr) {
         try {
             $session = $mgr.GetCurrentSession()
+            if (-not $session) {
+                try {
+                    $allSessions = $mgr.GetSessions()
+                    if ($allSessions -and $allSessions.Count -gt 0) {
+                        foreach ($s in $allSessions) {
+                            $pInfo = $s.GetPlaybackInfo()
+                            if ($pInfo -and [int]$pInfo.PlaybackStatus -eq 4) {
+                                $session = $s
+                                break
+                            }
+                        }
+                        if (-not $session) {
+                            $session = $allSessions[0]
+                        }
+                    }
+                } catch {}
+            }
+
             if ($session) {
                 $props = Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
                 $info = $session.GetPlaybackInfo()
@@ -164,6 +189,18 @@ while ($true) {
     }
 
     # 2. Check Notifications
+    if (-not $listener -or -not $hasNotifAccess) {
+        if ($tick % 5 -eq 0) {
+            try {
+                $listener = [Windows.UI.Notifications.Management.UserNotificationListener]::Current
+                if ($listener) {
+                    $access = Await ($listener.RequestAccessAsync()) ([Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus])
+                    $hasNotifAccess = ($access -eq [Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus]::Allowed)
+                }
+            } catch {}
+        }
+    }
+
     if ($hasNotifAccess -and $listener) {
         try {
             $notifs = Await ($listener.GetNotificationsAsync([Windows.UI.Notifications.NotificationKinds]::Toast)) ([System.Collections.Generic.IReadOnlyList[Windows.UI.Notifications.UserNotification]])
@@ -272,28 +309,52 @@ export class WinBridge {
   }
 
   private initScriptPath() {
-    // 1. Try relative to __dirname
-    const localPath = path.join(__dirname, 'winBridge.ps1');
-    if (fs.existsSync(localPath)) {
-      this.scriptPath = localPath;
-      return;
-    }
-
-    // 2. Try source tree path
-    const srcPath = path.join(app.getAppPath(), 'src/main/services/platform/winBridge.ps1');
-    if (fs.existsSync(srcPath)) {
-      this.scriptPath = srcPath;
-      return;
-    }
-
-    // 3. Fallback: write embedded script into userData directory
     try {
+      // 1. In development, try to run directly from disk if unpackaged
+      if (!app.isPackaged) {
+        const localPath = path.join(__dirname, 'winBridge.ps1');
+        if (fs.existsSync(localPath)) {
+          this.scriptPath = localPath;
+          return;
+        }
+        const srcPath = path.join(app.getAppPath(), 'src/main/services/platform/winBridge.ps1');
+        if (fs.existsSync(srcPath)) {
+          this.scriptPath = srcPath;
+          return;
+        }
+      }
+
+      // 2. In packaged production app:
+      // powershell.exe cannot execute a file inside an asar archive!
+      // Check if asarUnpack extracted it into app.asar.unpacked
+      const unpackedPath = path.join(__dirname.replace('app.asar', 'app.asar.unpacked'), 'winBridge.ps1');
+      if (fs.existsSync(unpackedPath)) {
+        this.scriptPath = unpackedPath;
+        console.log('[WinBridge] Found unpacked script at:', this.scriptPath);
+        return;
+      }
+
+      // 3. Guaranteed real filesystem fallback: write into app userData directory
       const userDataDir = app.getPath('userData');
       const targetPath = path.join(userDataDir, 'winBridge.ps1');
-      fs.writeFileSync(targetPath, EMBEDDED_WIN_BRIDGE_SCRIPT, 'utf-8');
+
+      let scriptContent = '';
+      const localAsarPath = path.join(__dirname, 'winBridge.ps1');
+      if (fs.existsSync(localAsarPath)) {
+        try {
+          scriptContent = fs.readFileSync(localAsarPath, 'utf-8');
+        } catch {}
+      }
+      if (!scriptContent) {
+        scriptContent = EMBEDDED_WIN_BRIDGE_SCRIPT;
+      }
+
+      fs.writeFileSync(targetPath, scriptContent, 'utf-8');
       this.scriptPath = targetPath;
-    } catch {
-      this.scriptPath = null;
+      console.log('[WinBridge] Extracted script to userData:', this.scriptPath);
+    } catch (err) {
+      console.error('[WinBridge] Failed to init script path:', err);
+      this.scriptPath = path.join(app.getPath('userData'), 'winBridge.ps1');
     }
   }
 
@@ -326,7 +387,12 @@ export class WinBridge {
         }
       });
 
-      this.child.on('exit', () => {
+      this.child.stderr?.on('data', (chunk: Buffer) => {
+        console.error('[WinBridge PowerShell stderr]:', chunk.toString('utf-8'));
+      });
+
+      this.child.on('exit', (code) => {
+        console.log('[WinBridge] Process exited with code:', code);
         this.child = null;
         if (!this.isShuttingDown) {
           setTimeout(() => this.startProcess(), 3000);
@@ -378,8 +444,14 @@ export class WinBridge {
       Function Await($t, $r) { $at = $asTaskGeneric.MakeGenericMethod($r); $nt = $at.Invoke($null, @($t)); $nt.Wait(1500) | Out-Null; return $nt.Result }
       [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime] | Out-Null
       $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-      $session = $mgr.GetCurrentSession()
-      if ($session) { Await ($session.TryTogglePlayPauseAsync()) ([bool]) | Out-Null }
+      if ($mgr) {
+        $session = $mgr.GetCurrentSession()
+        if (-not $session) {
+          $all = $mgr.GetSessions()
+          if ($all -and $all.Count -gt 0) { $session = $all[0] }
+        }
+        if ($session) { Await ($session.TryTogglePlayPauseAsync()) ([bool]) | Out-Null }
+      }
     `;
     try {
       await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd], { windowsHide: true });
@@ -393,8 +465,14 @@ export class WinBridge {
       Function Await($t, $r) { $at = $asTaskGeneric.MakeGenericMethod($r); $nt = $at.Invoke($null, @($t)); $nt.Wait(1500) | Out-Null; return $nt.Result }
       [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime] | Out-Null
       $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-      $session = $mgr.GetCurrentSession()
-      if ($session) { Await ($session.TrySkipNextAsync()) ([bool]) | Out-Null }
+      if ($mgr) {
+        $session = $mgr.GetCurrentSession()
+        if (-not $session) {
+          $all = $mgr.GetSessions()
+          if ($all -and $all.Count -gt 0) { $session = $all[0] }
+        }
+        if ($session) { Await ($session.TrySkipNextAsync()) ([bool]) | Out-Null }
+      }
     `;
     try {
       await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd], { windowsHide: true });
@@ -408,8 +486,14 @@ export class WinBridge {
       Function Await($t, $r) { $at = $asTaskGeneric.MakeGenericMethod($r); $nt = $at.Invoke($null, @($t)); $nt.Wait(1500) | Out-Null; return $nt.Result }
       [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime] | Out-Null
       $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-      $session = $mgr.GetCurrentSession()
-      if ($session) { Await ($session.TrySkipPreviousAsync()) ([bool]) | Out-Null }
+      if ($mgr) {
+        $session = $mgr.GetCurrentSession()
+        if (-not $session) {
+          $all = $mgr.GetSessions()
+          if ($all -and $all.Count -gt 0) { $session = $all[0] }
+        }
+        if ($session) { Await ($session.TrySkipPreviousAsync()) ([bool]) | Out-Null }
+      }
     `;
     try {
       await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd], { windowsHide: true });
@@ -424,4 +508,3 @@ export class WinBridge {
     }
   }
 }
-
